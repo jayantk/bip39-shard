@@ -34,13 +34,15 @@ The output of this command will be printed to stdout and list a mnemonic phrase 
 Note that the **number of each shard** must be saved along with the mnemonic phrase itself.
 The number is required to recover the original seed phrase.
 
-Recover the original seed phrase from 3 shares:
+To recover the original seed phrase from the shares, save the mnemonic phrases and their number to a file called `shards.txt`:
 
 ```shards.txt
 2 zebra chuckle topic net blossom bundle there renew inflict fish father pen satisfy quote coconut meat original among mixed awkward where jewel theory leave
 3 text hollow link perfect sheriff ocean steak casino differ media because found orient fork ocean leisure measure fresh grow tower wedding public voyage team
 5 explain industry language fault diagram rice ivory enter letter early harsh twice shield adapt slender draw tent stem tank wrestle forward purity carbon ship
 ```
+
+Then run the `recover` command:
 
 ```sh
 $ cat shards.txt | bip39-shard recover
