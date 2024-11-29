@@ -1,5 +1,6 @@
 use anyhow::Result;
 use anyhow::anyhow;
+use std::io::{self, BufRead};
 
 fn main() {
     let matches = clap::Command::new("seed-splitter")
@@ -31,13 +32,11 @@ fn main() {
         )
         .subcommand(
             clap::Command::new("recover")
-                .about("Recover the original seed phrase from shards")
-                .arg(
-                    clap::Arg::new("shards")
-                        .help("The shards to recover from (one per line)")
-                        .required(true)
-                        .num_args(1..)
-                )
+                .about("Recover the original seed phrase from shards read from stdin (one per line)")
+        )
+        .subcommand(
+            clap::Command::new("generate")
+                .about("Generate a new random BIP39 seed phrase")
         )
         .get_matches();
 
@@ -52,33 +51,45 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Some(("recover", matches)) => {
-            let shards: Vec<MnemonicShard> = matches
-                .get_many::<String>("shards")
-                .unwrap()
-                .map(|s| {
-                    let parts: Vec<&str> = s.split_whitespace().collect();
-                    if parts.len() < 2 {
-                        eprintln!("Invalid shard format. Expected: <number> <mnemonic>");
+        Some(("recover", _)) => {
+            let stdin = io::stdin();
+            let mut shards = Vec::new();
+
+            for line in stdin.lock().lines() {
+                let line = match line {
+                    Ok(l) => l,
+                    Err(e) => {
+                        eprintln!("Error reading line: {}", e);
                         std::process::exit(1);
                     }
-                    let index = parts[0].parse::<u8>().unwrap_or_else(|_| {
-                        eprintln!("Invalid shard number");
-                        std::process::exit(1);
-                    });
-                    let mnemonic = bip39::Mnemonic::parse_in(
-                        bip39::Language::English,
-                        &parts[1..].join(" ")
-                    ).unwrap_or_else(|e| {
-                        eprintln!("Invalid mnemonic: {}", e);
-                        std::process::exit(1);
-                    });
-                    MnemonicShard {
-                        index,
-                        mnemonic,
-                    }
-                })
-                .collect();
+                };
+
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() < 2 {
+                    eprintln!("Invalid shard format. Expected: <number> <mnemonic>. Got:");
+                    eprintln!("{}", line);
+                    std::process::exit(1);
+                }
+
+                let index = parts[0].parse::<u8>().unwrap_or_else(|_| {
+                    eprintln!("Invalid shard number");
+                    std::process::exit(1);
+                });
+
+                let mnemonic = bip39::Mnemonic::parse_in(
+                    bip39::Language::English,
+                    &parts[1..].join(" ")
+                ).unwrap_or_else(|e| {
+                    eprintln!("Invalid mnemonic: {}", e);
+                    std::process::exit(1);
+                });
+
+                shards.push(MnemonicShard {
+                    index,
+                    mnemonic,
+                });
+            }
+
             match recover_command(&shards) {
                 Ok(phrase) => {
                     println!("Recovered seed phrase: {}", phrase);
@@ -89,8 +100,23 @@ fn main() {
                 }
             }
         }
-        _ => {
-            eprintln!("Unknown command");
+        Some(("generate", _)) => {
+            match generate_command() {
+                Ok(phrase) => {
+                    println!("Generated seed phrase: {}", phrase);
+                }
+                Err(e) => {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some((s, _)) => {
+            eprintln!("Unknown command: {}", s);
+            std::process::exit(1);
+        }
+        None => {
+            eprintln!("No command provided");
             std::process::exit(1);
         }
     };    
@@ -100,6 +126,19 @@ fn main() {
 struct MnemonicShard {
     pub index: u8,
     pub mnemonic: bip39::Mnemonic,
+}
+
+fn generate_command() -> Result<String> {
+    // Generate 32 bytes of random data using system RNG
+    let mut entropy = [0u8; 32];
+    getrandom::getrandom(&mut entropy)
+        .map_err(|e| anyhow!("Failed to generate random entropy: {}", e))?;
+    
+    // Convert to BIP39 mnemonic
+    let mnemonic = bip39::Mnemonic::from_entropy(&entropy)
+        .map_err(|e| anyhow!("Failed to create mnemonic: {}", e))?;
+
+    Ok(mnemonic.to_string())
 }
 
 fn split_command(seed_phrase: &str, num_shards: u8, threshold: u8) -> Result<Vec<MnemonicShard>> {
@@ -122,7 +161,7 @@ fn split_command(seed_phrase: &str, num_shards: u8, threshold: u8) -> Result<Vec
         let share_bytes: Vec<u8> = share.y.iter().map(|b| b.0).collect();
         let mnemonic = bip39::Mnemonic::from_entropy(&share_bytes)
             .map_err(|e| anyhow!("Failed to convert shard {} to phrase: {}", share.x.0, e))?;
-        println!("Shard {}: {} {}", share.x.0, share.x.0, mnemonic.to_string());
+        println!("{} {}", share.x.0, mnemonic.to_string());
         mnemonics.push(MnemonicShard {
             index: share.x.0,
             mnemonic,

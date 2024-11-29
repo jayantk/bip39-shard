@@ -339,6 +339,7 @@ dependencies = [
  "anyhow",
  "bip39",
  "clap",
+ "getrandom",
  "quickcheck",
  "quickcheck_macros",
  "sharks",
