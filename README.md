@@ -1,6 +1,8 @@
 # BIP39 Shard
 
-A command-line tool for splitting BIP39 seed phrases into Shamir secret shares and recovering them.
+A command-line tool for splitting BIP39 seed phrases into multiple shares and recovering them.
+Each share is represented as a (numbered) BIP39 mnemonic phrase for easy storage and distribution.
+The tool uses Shamir's Secret Sharing to split the seed phrase into `n` shares with a `k`-of-`n` threshold to recover the original seed phrase.
 
 ## Features
 
