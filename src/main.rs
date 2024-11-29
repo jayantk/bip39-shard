@@ -3,7 +3,42 @@ use anyhow::anyhow;
 use std::io::{self, BufRead};
 
 fn main() {
-    let matches = clap::Command::new("bip39-shard")
+    if let Err(e) = run() {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
+    let matches = build_cli().get_matches();
+
+    match matches.subcommand() {
+        Some(("split", matches)) => {
+            let args = parse_split_args(matches)?;
+            let shards = split_command(&args.seed_phrase, args.num_shards, args.threshold)?;
+            for shard in shards {
+                println!("{} {}", shard.index, shard.mnemonic.to_string());
+            }
+            Ok(())
+        }
+        Some(("recover", _)) => {
+            let shards = parse_recover_args()?;
+            let phrase = recover_command(&shards)?;
+            println!("{}", phrase);
+            Ok(())
+        }
+        Some(("generate", _)) => {
+            let phrase = generate_command()?;
+            println!("{}", phrase);
+            Ok(())
+        }
+        Some((s, _)) => Err(anyhow!("Unknown command: {}", s)),
+        None => Err(anyhow!("No command provided")),
+    }
+}
+
+fn build_cli() -> clap::Command {
+    clap::Command::new("bip39-shard")
         .about("Split a BIP39 seed phrase into Shamir shares")
         .subcommand(
             clap::Command::new("split")
@@ -38,88 +73,49 @@ fn main() {
             clap::Command::new("generate")
                 .about("Generate a new random BIP39 seed phrase")
         )
-        .get_matches();
+}
 
-    match matches.subcommand() {
-        Some(("split", matches)) => {
-            let seed_phrase = matches.get_one::<String>("seed-phrase").unwrap().clone();
-            let num_shards = *matches.get_one::<u8>("shards").unwrap();
-            let threshold = *matches.get_one::<u8>("threshold").unwrap();
-            
-            if let Err(e) = split_command(&seed_phrase, num_shards, threshold) {
-                eprintln!("{}", e);
-                std::process::exit(1);
-            }
+struct SplitArgs {
+    seed_phrase: String,
+    num_shards: u8,
+    threshold: u8,
+}
+
+fn parse_split_args(matches: &clap::ArgMatches) -> Result<SplitArgs> {
+    Ok(SplitArgs {
+        seed_phrase: matches.get_one::<String>("seed-phrase").unwrap().clone(),
+        num_shards: *matches.get_one::<u8>("shards").unwrap(),
+        threshold: *matches.get_one::<u8>("threshold").unwrap(),
+    })
+}
+
+fn parse_recover_args() -> Result<Vec<MnemonicShard>> {
+    let stdin = io::stdin();
+    let mut shards = Vec::new();
+
+    for line in stdin.lock().lines() {
+        let line = line.map_err(|e| anyhow!("Error reading line: {}", e))?;
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 2 {
+            return Err(anyhow!("Invalid shard format. Expected: <number> <mnemonic>. Got:\n{}", line));
         }
-        Some(("recover", _)) => {
-            let stdin = io::stdin();
-            let mut shards = Vec::new();
 
-            for line in stdin.lock().lines() {
-                let line = match line {
-                    Ok(l) => l,
-                    Err(e) => {
-                        eprintln!("Error reading line: {}", e);
-                        std::process::exit(1);
-                    }
-                };
+        let index = parts[0].parse::<u8>()
+            .map_err(|_| anyhow!("Invalid shard number"))?;
 
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() < 2 {
-                    eprintln!("Invalid shard format. Expected: <number> <mnemonic>. Got:");
-                    eprintln!("{}", line);
-                    std::process::exit(1);
-                }
+        let mnemonic = bip39::Mnemonic::parse_in(
+            bip39::Language::English,
+            &parts[1..].join(" ")
+        ).map_err(|e| anyhow!("Invalid mnemonic: {}", e))?;
 
-                let index = parts[0].parse::<u8>().unwrap_or_else(|_| {
-                    eprintln!("Invalid shard number");
-                    std::process::exit(1);
-                });
+        shards.push(MnemonicShard {
+            index,
+            mnemonic,
+        });
+    }
 
-                let mnemonic = bip39::Mnemonic::parse_in(
-                    bip39::Language::English,
-                    &parts[1..].join(" ")
-                ).unwrap_or_else(|e| {
-                    eprintln!("Invalid mnemonic: {}", e);
-                    std::process::exit(1);
-                });
-
-                shards.push(MnemonicShard {
-                    index,
-                    mnemonic,
-                });
-            }
-
-            match recover_command(&shards) {
-                Ok(phrase) => {
-                    println!("{}", phrase);
-                }
-                Err(e) => {
-                    eprintln!("{}", e);
-                    std::process::exit(1);
-                }
-            }
-        }
-        Some(("generate", _)) => {
-            match generate_command() {
-                Ok(phrase) => {
-                    println!("{}", phrase);
-                }
-                Err(e) => {
-                    eprintln!("{}", e);
-                    std::process::exit(1);
-                }
-            }
-        }
-        Some((s, _)) => {
-            eprintln!("Unknown command: {}", s);
-            std::process::exit(1);
-        }
-        None => {
-            eprintln!("No command provided");
-            std::process::exit(1);
-        }
-    };    
+    Ok(shards)
 }
 
 #[derive(Clone, Debug)]
@@ -161,7 +157,6 @@ fn split_command(seed_phrase: &str, num_shards: u8, threshold: u8) -> Result<Vec
         let share_bytes: Vec<u8> = share.y.iter().map(|b| b.0).collect();
         let mnemonic = bip39::Mnemonic::from_entropy(&share_bytes)
             .map_err(|e| anyhow!("Failed to convert shard {} to phrase: {}", share.x.0, e))?;
-        println!("{} {}", share.x.0, mnemonic.to_string());
         mnemonics.push(MnemonicShard {
             index: share.x.0,
             mnemonic,

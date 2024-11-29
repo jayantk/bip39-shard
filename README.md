@@ -31,7 +31,7 @@ $ bip39-shard split --shards 5 --threshold 3 "pledge ridge neutral civil discove
 ```
 
 The output of this command will be printed to stdout and list a mnemonic phrase per line, with the number of each shard prefixed.
-Note that the *number of each shard* must be saved along with the mnemonic phrase itself.
+Note that the **number of each shard** must be saved along with the mnemonic phrase itself.
 The number is required to recover the original seed phrase.
 
 Recover the original seed phrase from 3 shares:
