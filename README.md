@@ -34,7 +34,8 @@ The output of this command will be printed to stdout and list a mnemonic phrase 
 Note that the **number of each shard** must be saved along with the mnemonic phrase itself.
 The number is required to recover the original seed phrase.
 
-To recover the original seed phrase from the shares, save the mnemonic phrases and their number to a file called `shards.txt`:
+To recover the original seed phrase from the shares, pass the shards (one per line) on stdin to the `recover` command.
+The easiest way to do this is to save the mnemonic phrases and their numbers to a file such as `shards.txt`:
 
 ```shards.txt
 2 zebra chuckle topic net blossom bundle there renew inflict fish father pen satisfy quote coconut meat original among mixed awkward where jewel theory leave
