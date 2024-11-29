@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use std::io::{self, BufRead};
 
 fn main() {
-    let matches = clap::Command::new("seed-splitter")
+    let matches = clap::Command::new("bip39-shard")
         .about("Split a BIP39 seed phrase into Shamir shares")
         .subcommand(
             clap::Command::new("split")
@@ -92,7 +92,7 @@ fn main() {
 
             match recover_command(&shards) {
                 Ok(phrase) => {
-                    println!("Recovered seed phrase: {}", phrase);
+                    println!("{}", phrase);
                 }
                 Err(e) => {
                     eprintln!("{}", e);
@@ -103,7 +103,7 @@ fn main() {
         Some(("generate", _)) => {
             match generate_command() {
                 Ok(phrase) => {
-                    println!("Generated seed phrase: {}", phrase);
+                    println!("{}", phrase);
                 }
                 Err(e) => {
                     eprintln!("{}", e);
